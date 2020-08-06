@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
 	FILE* gp;
 	char inputImage[255];
 	char outputImage[255];
-	char filterName[255];
+	char filterName[251];
 	float filter[3][3];
 	float grayscale[3][3]			 = {{0.0, 0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 0.0}};
 	float moveMeanFilter[3][3]		 = {{1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0}, {1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0}, {1.0 / 9.0, 1.0 / 9.0, 1.0 / 9.0}};
@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
 	jpeg_read_header(&cinfo, TRUE);
 	jpeg_start_decompress(&cinfo);
 	JSAMPARRAY buffer = (JSAMPARRAY)malloc(sizeof(JSAMPROW) * cinfo.output_height);
-	for(int i = 0; i < cinfo.output_height; ++i) {
+	for(int i = 0; i < (int)cinfo.output_height; ++i) {
 		buffer[i] = (JSAMPROW)calloc(sizeof(JSAMPLE), cinfo.output_width * cinfo.output_components);
 	}
 	while(cinfo.output_scanline < cinfo.output_height) {
