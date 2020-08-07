@@ -19,9 +19,9 @@ int main(int argc, char** argv) {
 	double sobelFilter_vertical[3][3] = {{1.0, 0.0, -1.0}, {2.0, 0.0, -2.0}, {1.0, 0.0, -1.0}};
 	double** ix;		//画像の勾配（ソーベルフィルタ水平の結果）
 	double** iy;		//画像の勾配（ソーベルフィルタ垂直の結果）
-	double**** M;
 	double** R;
-	double k = 0.04;
+	double k   = 0.04;
+	double max = 0.0;
 
 	if(argc < 2) {
 		printf("Type Input Image Name\t---> ");
@@ -92,57 +92,33 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	M = (double****)malloc(sizeof(double) * out_height);
+	R = (double**)malloc(sizeof(double) * out_height);
 	for(int i = 0; i < out_height; i++) {
-		M[i] = (double***)malloc(sizeof(double) * out_width);
+		R[i] = (double*)malloc(sizeof(double) * out_width);
 		for(int j = 0; j < out_width; j++) {
-			M[i][j]		  = (double**)malloc(sizeof(double) * 2);
-			M[i][j][0]	  = (double*)malloc(sizeof(double) * 2);
-			M[i][j][1]	  = (double*)malloc(sizeof(double) * 2);
-			M[i][j][0][0] = 0.0;
-			M[i][j][0][1] = 0.0;
-			M[i][j][1][0] = 0.0;
-			M[i][j][1][1] = 0.0;
+			double m_00 = 0.0;
+			double m_01 = 0.0;
+			double m_11 = 0.0;
 			for(int l = -1; l <= 1; l++) {
 				for(int r = -1; r <= 1; r++) {
 					if((i + l < 0 || i + l >= out_height) || (j + r < 0 || j + r >= out_width)) {
-						M[i][j][0][0] += ix[i][j] * ix[i][j];
-						M[i][j][0][1] += ix[i][j] * iy[i][j];
-						M[i][j][1][0] += ix[i][j] * iy[i][j];
-						M[i][j][1][1] += ix[i][j] * iy[i][j];
+						m_00 += ix[i][j] * ix[i][j];
+						m_01 += ix[i][j] * iy[i][j];
+						m_11 += iy[i][j] * iy[i][j];
 					} else {
-						M[i][j][0][0] += ix[i + l][j + r] * ix[i + l][j + r];
-						M[i][j][0][1] += ix[i + l][j + r] * iy[i + l][j + r];
-						M[i][j][1][0] += ix[i + l][j + r] * iy[i + l][j + r];
-						M[i][j][1][1] += iy[i + l][j + r] * iy[i + l][j + r];
+						m_00 += ix[i + l][j + r] * ix[i + l][j + r];
+						m_01 += ix[i + l][j + r] * iy[i + l][j + r];
+						m_11 += iy[i + l][j + r] * iy[i + l][j + r];
 					}
 				}
 			}
-		}
-	}
-
-	R		   = (double**)malloc(sizeof(double) * out_height);
-	double max = 0.0;
-	for(int i = 0; i < out_height; i++) {
-		free(ix[i]);
-		free(iy[i]);
-		R[i] = (double*)malloc(sizeof(double) * out_width);
-		for(int j = 0; j < out_width; j++) {
-			R[i][j] = (M[i][j][0][0] * M[i][j][1][1] - M[i][j][1][0] * M[i][j][0][1]) - k * (M[i][j][0][0] + M[i][j][1][1]) * (M[i][j][0][0] + M[i][j][1][1]);
-			//printf("%d\t%d\t%f\t%f\t%f\t%f\t%f\n", i, j, M[i][j][0][0], M[i][j][0][1], M[i][j][1][0], M[i][j][1][1], R[i][j]);
-			free(M[i][j][0]);
-			free(M[i][j][1]);
+			R[i][j] = (m_00 * m_11 - m_01 * m_01) - k * (m_00 + m_11) * (m_00 + m_11);
 			if(max < R[i][j]) {
 				max = R[i][j];
-				//printf("%d\t%d\t%f\t%f\t%f\t%f\t%f\n", i, j, M[i][j][0][0], M[i][j][0][1], M[i][j][1][0], M[i][j][1][1], R[i][j]);
 			}
 		}
-		free(M[i]);
 	}
-	//printf("%f\n", max);
-	free(M);
-	free(ix);
-	free(iy);
+	printf("%f\n", max);
 
 	coutfo.image_width		= out_width;
 	coutfo.image_height		= out_height;
@@ -153,6 +129,8 @@ int main(int argc, char** argv) {
 	jpeg_start_compress(&coutfo, TRUE);
 	JSAMPARRAY harrisImg = (JSAMPARRAY)malloc(sizeof(JSAMPROW) * out_height);
 	for(int i = 0; i < out_height; i++) {
+		free(ix[i]);
+		free(iy[i]);
 		harrisImg[i] = (JSAMPROW)malloc(sizeof(JSAMPLE) * out_width * 3);
 		for(int j = 0; j < out_width; j++) {
 			harrisImg[i][j * 3 + 0] = inImg[i][j * 3 + 0];
@@ -179,7 +157,11 @@ int main(int argc, char** argv) {
 				printf("%d\t%d\t%f\n", i, j, R[i][j]);
 			} */
 		}
+		free(R[i]);
 	}
+	free(ix);
+	free(iy);
+	free(R);
 
 	jpeg_write_scanlines(&coutfo, harrisImg, out_height);
 	jpeg_finish_compress(&coutfo);
@@ -190,11 +172,9 @@ int main(int argc, char** argv) {
 	for(int i = 0; i < out_height; i++) {
 		free(grayImg[i]);
 		free(harrisImg[i]);
-		free(R[i]);
 	}
 	free(grayImg);
 	free(harrisImg);
-	free(R);
 	fclose(gp);
 
 	printf("Done\n");
