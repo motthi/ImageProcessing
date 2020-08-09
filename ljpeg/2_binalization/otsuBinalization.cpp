@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
 	jpeg_read_header(&cinfo, TRUE);
 	jpeg_start_decompress(&cinfo);
 	JSAMPARRAY buffer = (JSAMPARRAY)malloc(sizeof(JSAMPROW) * cinfo.output_height);
-	for(int i = 0; i < cinfo.output_height; ++i) {
+	for(int i = 0; i < (int)cinfo.output_height; ++i) {
 		buffer[i] = (JSAMPROW)calloc(sizeof(JSAMPLE), cinfo.output_width * cinfo.output_components);
 	}
 	while(cinfo.output_scanline < cinfo.output_height) {
