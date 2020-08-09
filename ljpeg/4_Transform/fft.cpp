@@ -55,6 +55,8 @@ int main(int argc, char** argv) {
 	while(cinfo.output_scanline < cinfo.output_height) {
 		jpeg_read_scanlines(&cinfo, buffer + cinfo.output_scanline, cinfo.output_height - cinfo.output_scanline);
 	}
+	jpeg_finish_decompress(&cinfo);
+	jpeg_destroy_decompress(&cinfo);
 	fclose(fp);
 
 	coutfo.err = jpeg_std_error(&jerr);
@@ -68,13 +70,6 @@ int main(int argc, char** argv) {
 	out_width  = cinfo.image_width;
 	out_height = cinfo.image_height;
 
-	coutfo.image_width		= out_width;
-	coutfo.image_height		= out_height;
-	coutfo.input_components = 1;					//グレースケールはチャンネル数を1
-	coutfo.in_color_space	= JCS_GRAYSCALE;		//グレースケールに設定
-	jpeg_set_defaults(&coutfo);
-	jpeg_set_quality(&coutfo, 75, TRUE);
-
 	/* グレースケールへ変換 */
 	JSAMPARRAY grayImg = (JSAMPARRAY)malloc(sizeof(JSAMPROW) * out_height);
 	for(int i = 0; i < out_height; i++) {
@@ -85,28 +80,70 @@ int main(int argc, char** argv) {
 	}
 
 	/* FFT用配列の初期化 */
-	fft_c = (double**)malloc(sizeof(double) * out_height);
-	fft_s = (double**)malloc(sizeof(double) * out_height);
-	for(int i = 0; i < 256; i++) {
-		fft_c[i] = (double*)malloc(sizeof(double) * out_width);
-		fft_s[i] = (double*)malloc(sizeof(double) * out_width);
-		for(int j = 0; j < 256; j++) {
-			fft_c[i][j] = (double)grayImg[i][j];
+	int xexp = 0, yexp = 0;
+	while(cinfo.output_width > pow(2, xexp)) {
+		xexp++;
+	}
+	while(cinfo.output_height > pow(2, yexp)) {
+		yexp++;
+	}
+	fft_c = (double**)malloc(sizeof(double) * pow(2, yexp));
+	fft_s = (double**)malloc(sizeof(double) * pow(2, yexp));
+	for(int i = 0; i < pow(2, yexp); i++) {
+		fft_c[i] = (double*)malloc(sizeof(double) * pow(2, xexp));
+		fft_s[i] = (double*)malloc(sizeof(double) * pow(2, xexp));
+		//printf("%d\n", i);
+		for(int j = 0; j < pow(2, xexp); j++) {
+			fft_c[i][j] = 0.0;
 			fft_s[i][j] = 0.0;
+			if(j >= out_width) {
+				if(i >= out_height) {
+					fft_c[i][j] = (double)grayImg[out_height - 1][out_width - 1];
+				} else {
+					fft_c[i][j] = (double)grayImg[i][out_width - 1];
+				}
+			} else {
+				if(i >= out_height) {
+					fft_c[i][j] = (double)grayImg[out_height - 1][j];
+				} else {
+					fft_c[i][j] = (double)grayImg[i][j];
+				}
+			}
 		}
 	}
 
 	/* FFT */
-	if(fft2(fft_c, fft_s, 1, out_width, out_height) == -1) {
+	if(fft2(fft_c, fft_s, 1, pow(2, xexp), pow(2, yexp)) == -1) {
 		return -1;
 	}
 
+	/* 周波数フィルタ */
+	coutfo.image_width		= pow(2, xexp);
+	coutfo.image_height		= pow(2, yexp);
+	coutfo.input_components = 1;					//グレースケールはチャンネル数を1
+	coutfo.in_color_space	= JCS_GRAYSCALE;		//グレースケールに設定
+	//jpeg_set_defaults(&coutfo);
+	//jpeg_set_quality(&coutfo, 75, TRUE);
+	//jpeg_start_compress(&coutfo, TRUE);
+	int filter_freq = 300;
+	for(int i = 0; i < pow(2, yexp); i++) {
+		for(int j = 0; j < pow(2, xexp); j++) {
+			if(abs(i - pow(2, yexp - 1)) < filter_freq && abs(j - pow(2, xexp - 1)) < filter_freq) {
+				//fft_c[i][j] = 0;
+				//fft_s[i][j] = 0;
+			} else {
+				fft_c[i][j] = 0;
+				fft_s[i][j] = 0;
+			}
+		}
+	}
+
 	/* FFT結果の可視化 */
-	/* max			= 0.0;
-	double** fftImg_buf = (double**)malloc(sizeof(double) * out_height);
-	for(int i = 0; i < 256; i++) {
-		fftImg_buf[i] = (double*)malloc(sizeof(double) * out_width);
-		for(int j = 0; j < 256; j++) {
+	/* max					= 0.0;
+	double** fftImg_buf = (double**)malloc(sizeof(double) * pow(2, yexp));
+	for(int i = 0; i < pow(2, yexp); i++) {
+		fftImg_buf[i] = (double*)malloc(sizeof(double) * pow(2, xexp));
+		for(int j = 0; j < pow(2, xexp); j++) {
 			fftImg_buf[i][j] = 0.0;
 			fftImg_buf[i][j] = fft_c[i][j] * fft_c[i][j] + fft_s[i][j] * fft_s[i][j];
 			if(fftImg_buf[i][j] != 0.0) {
@@ -123,30 +160,34 @@ int main(int argc, char** argv) {
 		}
 	} */
 
-	/* 周波数フィルタ */
-	int filter_freq = 15;
-	for(int i = 0; i < out_height; i++) {
-		for(int j = 0; j < out_width; j++) {
-			if(abs(i - 128) < -filter_freq || abs(i - 128) > filter_freq || abs(j - 128) < -filter_freq || abs(j - 128) > filter_freq) {
-				/* 高域領域 */
-				//fft_c[i][j] = 0;
-				//fft_s[i][j] = 0;
-			} else {
-				/* 低域領域 */
-				fft_c[i][j] = 0;
-				fft_s[i][j] = 0;
+	/* 画像の保存 */
+	/* JSAMPARRAY fftImg = (JSAMPARRAY)malloc(sizeof(JSAMPROW) * pow(2, yexp));
+	for(int i = 0; i < pow(2, yexp); i++) {
+		fftImg[i] = (JSAMPROW)malloc(sizeof(JSAMPLE) * pow(2, xexp));
+		for(int j = 0; j < pow(2, xexp); j++) {
+			fftImg[i][j] = (int)(fftImg_buf[i][j] * 255.0 / max);
+			if(fftImg[i][j] > 255) {
+				fftImg[i][j] = 255;
+			} else if(fftImg[i][j] < 0) {
+				fftImg[i][j] = 0;
 			}
 		}
-	}
+	} */
 
 	/* DFFT */
-	if(fft2(fft_c, fft_s, -1, out_width, out_height) == -1) {
+	if(fft2(fft_c, fft_s, -1, pow(2, xexp), pow(2, yexp)) == -1) {
 		printf("\n\nError : malloc");
 		return -1;
 	}
 
 	/* フィルタ後の画像の可視化 */
-	max					= 0.0;
+	coutfo.image_width		= out_width;
+	coutfo.image_height		= out_height;
+	coutfo.input_components = 1;					//グレースケールはチャンネル数を1
+	coutfo.in_color_space	= JCS_GRAYSCALE;		//グレースケールに設定 max					= 0.0;
+	jpeg_set_defaults(&coutfo);
+	jpeg_set_quality(&coutfo, 75, TRUE);
+	jpeg_start_compress(&coutfo, TRUE);
 	double** fftImg_buf = (double**)malloc(sizeof(double) * out_height);
 	for(int i = 0; i < out_height; i++) {
 		fftImg_buf[i] = (double*)malloc(sizeof(double) * out_width);
@@ -163,7 +204,6 @@ int main(int argc, char** argv) {
 	}
 
 	/* 画像の保存 */
-	jpeg_start_compress(&coutfo, TRUE);
 	JSAMPARRAY fftImg = (JSAMPARRAY)malloc(sizeof(JSAMPROW) * out_height);
 	for(int i = 0; i < out_height; i++) {
 		fftImg[i] = (JSAMPROW)malloc(sizeof(JSAMPLE) * out_width);
@@ -177,12 +217,11 @@ int main(int argc, char** argv) {
 		}
 	}
 
+	//jpeg_write_scanlines(&coutfo, fftImg, pow(2, yexp));
 	jpeg_write_scanlines(&coutfo, fftImg, out_height);
 	jpeg_finish_compress(&coutfo);
 
 	jpeg_destroy_compress(&coutfo);
-	jpeg_finish_decompress(&cinfo);
-	jpeg_destroy_decompress(&cinfo);
 	for(int i = 0; i < out_height; i++) {
 		free(grayImg[i]);
 		free(fftImg_buf[i]);
@@ -234,17 +273,17 @@ int fft2(double** a_rl, double** a_im, int inv, int xsize, int ysize) {
 		yexp++;
 	}
 
-	b_rl	 = (double**)malloc(sizeof(double) * ysize);
-	b_im	 = (double**)malloc(sizeof(double) * ysize);
 	hsin_tbl = (double*)calloc((size_t)xsize, sizeof(double));
 	hcos_tbl = (double*)calloc((size_t)xsize, sizeof(double));
 	vsin_tbl = (double*)calloc((size_t)ysize, sizeof(double));
 	vcos_tbl = (double*)calloc((size_t)ysize, sizeof(double));
 	buf_x	 = (double*)malloc((size_t)xsize * sizeof(double));
 	buf_y	 = (double*)malloc((size_t)ysize * sizeof(double));
-	for(int i = 0; i < ysize; i++) {
-		b_rl[i] = (double*)malloc(sizeof(double) * xsize);
-		b_im[i] = (double*)malloc(sizeof(double) * xsize);
+	b_rl	 = (double**)malloc(sizeof(double) * xsize);
+	b_im	 = (double**)malloc(sizeof(double) * xsize);
+	for(int i = 0; i < xsize; i++) {
+		b_rl[i] = (double*)malloc(sizeof(double) * ysize);
+		b_im[i] = (double*)malloc(sizeof(double) * ysize);
 		if(b_rl[i] == NULL || b_im[i] == NULL) {
 			perror("malloc");
 			return -1;
@@ -271,8 +310,8 @@ int fft2(double** a_rl, double** a_im, int inv, int xsize, int ysize) {
 	}
 
 	/* ２次元データの転置 */
-	rvmtx(b_rl, a_rl, xsize, ysize);
-	rvmtx(b_im, a_im, xsize, ysize);
+	rvmtx(b_rl, a_rl, ysize, xsize);
+	rvmtx(b_im, a_im, ysize, xsize);
 
 	/* メモリ領域の解法 */
 	for(int i = 0; i < ysize; i++) {
@@ -397,7 +436,9 @@ void birv(double* a, int length, int ex, double* b) {
 -----------------------------------------------------------------------------*/
 void rvmtx(double** a, double** b, int xsize, int ysize) {
 	for(int i = 0; i < ysize; i++) {
-		for(int j = 0; j < xsize; j++)
+		for(int j = 0; j < xsize; j++) {
+			//printf("\t%d\t%d\n", i, j);
 			b[j][i] = a[i][j];
+		}
 	}
 }
