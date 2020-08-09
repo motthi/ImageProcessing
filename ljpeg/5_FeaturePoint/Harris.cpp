@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
 	double** ix;		//画像の勾配（ソーベルフィルタ水平の結果）
 	double** iy;		//画像の勾配（ソーベルフィルタ垂直の結果）
 	double** R;
-	double k   = 0.04;
+	double k   = 0.005;
 	double max = 0.0;
 
 	if(argc < 2) {
@@ -31,8 +31,8 @@ int main(int argc, char** argv) {
 	}
 	sprintf(outputImage, "harris.jpg");
 
-	jpeg_create_decompress(&cinfo);
 	cinfo.err = jpeg_std_error(&jerr);
+	jpeg_create_decompress(&cinfo);
 	if((fp = fopen(inputImage, "rb")) == NULL) {
 		perror("fopen");
 		exit(1);
@@ -48,6 +48,8 @@ int main(int argc, char** argv) {
 	while(cinfo.output_scanline < cinfo.output_height) {
 		jpeg_read_scanlines(&cinfo, inImg + cinfo.output_scanline, cinfo.output_height - cinfo.output_scanline);
 	}
+	jpeg_finish_decompress(&cinfo);
+	jpeg_destroy_decompress(&cinfo);
 	fclose(fp);
 
 	coutfo.err = jpeg_std_error(&jerr);
@@ -56,7 +58,6 @@ int main(int argc, char** argv) {
 		perror("fopen");
 		exit(1);
 	}
-	jpeg_stdio_dest(&coutfo, gp);
 
 	out_width  = cinfo.image_width;
 	out_height = cinfo.image_height;
@@ -120,6 +121,7 @@ int main(int argc, char** argv) {
 	}
 	printf("%f\n", max);
 
+	jpeg_stdio_dest(&coutfo, gp);
 	coutfo.image_width		= out_width;
 	coutfo.image_height		= out_height;
 	coutfo.input_components = 3;
@@ -167,8 +169,6 @@ int main(int argc, char** argv) {
 	jpeg_finish_compress(&coutfo);
 
 	jpeg_destroy_compress(&coutfo);
-	jpeg_finish_decompress(&cinfo);
-	jpeg_destroy_decompress(&cinfo);
 	for(int i = 0; i < out_height; i++) {
 		free(grayImg[i]);
 		free(harrisImg[i]);
