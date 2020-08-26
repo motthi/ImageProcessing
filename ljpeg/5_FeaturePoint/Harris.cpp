@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
 	double** ix;		//画像の勾配（ソーベルフィルタ水平の結果）
 	double** iy;		//画像の勾配（ソーベルフィルタ垂直の結果）
 	double** R;
-	double k   = 0.005;
+	double k   = 0.15;
 	double max = 0.0;
 
 	if(argc < 2) {
@@ -67,7 +67,11 @@ int main(int argc, char** argv) {
 	for(int i = 0; i < out_height; i++) {
 		grayImg[i] = (JSAMPROW)malloc(sizeof(JSAMPLE) * out_width);
 		for(int j = 0; j < out_width; j++) {
-			grayImg[i][j] = 0.3 * inImg[i][j * 3 + 0] + 0.59 * inImg[i][j * 3 + 1] + 0.11 * inImg[i][j * 3 + 2];		//グレースケール化
+			if(cinfo.output_components == 3) {
+				grayImg[i][j] = 0.3 * inImg[i][j * 3 + 0] + 0.59 * inImg[i][j * 3 + 1] + 0.11 * inImg[i][j * 3 + 2];		//グレースケール化
+			} else if(cinfo.output_components == 1) {
+				grayImg[i][j] = inImg[i][j];
+			}
 		}
 	}
 
@@ -103,9 +107,8 @@ int main(int argc, char** argv) {
 			for(int l = -1; l <= 1; l++) {
 				for(int r = -1; r <= 1; r++) {
 					if((i + l < 0 || i + l >= out_height) || (j + r < 0 || j + r >= out_width)) {
-						m_00 += ix[i][j] * ix[i][j];
-						m_01 += ix[i][j] * iy[i][j];
-						m_11 += iy[i][j] * iy[i][j];
+						R[i][j] = 0.0;
+						continue;
 					} else {
 						m_00 += ix[i + l][j + r] * ix[i + l][j + r];
 						m_01 += ix[i + l][j + r] * iy[i + l][j + r];
@@ -135,15 +138,21 @@ int main(int argc, char** argv) {
 		free(iy[i]);
 		harrisImg[i] = (JSAMPROW)malloc(sizeof(JSAMPLE) * out_width * 3);
 		for(int j = 0; j < out_width; j++) {
-			harrisImg[i][j * 3 + 0] = inImg[i][j * 3 + 0];
-			harrisImg[i][j * 3 + 1] = inImg[i][j * 3 + 1];
-			harrisImg[i][j * 3 + 2] = inImg[i][j * 3 + 2];
-			R[i][j]					= R[i][j] * 255.0 / max;
+			if(cinfo.output_components == 1) {
+				harrisImg[i][j * 3 + 0] = inImg[i][j];
+				harrisImg[i][j * 3 + 1] = inImg[i][j];
+				harrisImg[i][j * 3 + 2] = inImg[i][j];
+			} else if(cinfo.output_components == 3) {
+				harrisImg[i][j * 3 + 0] = inImg[i][j * 3 + 0];
+				harrisImg[i][j * 3 + 1] = inImg[i][j * 3 + 1];
+				harrisImg[i][j * 3 + 2] = inImg[i][j * 3 + 2];
+			}
+			R[i][j] = R[i][j] * 255.0 / max;
 			if(R[i][j] <= 0) {
 				/* Edge */
-				harrisImg[i][j * 3 + 0] = 255;
-				harrisImg[i][j * 3 + 1] = 0;
-				harrisImg[i][j * 3 + 2] = 0;
+				//harrisImg[i][j * 3 + 0] = 255;
+				//harrisImg[i][j * 3 + 1] = 0;
+				//harrisImg[i][j * 3 + 2] = 0;
 			} else if(abs(R[i][j]) < 1) {
 				/* Flat */
 				//harrisImg[i][j * 3 + 0] = 255;
@@ -151,9 +160,9 @@ int main(int argc, char** argv) {
 				//harrisImg[i][j * 3 + 2] = 0;
 			} else {
 				/* Corner */
-				//harrisImg[i][j * 3 + 0] = 255;
-				//harrisImg[i][j * 3 + 1] = 0;
-				//harrisImg[i][j * 3 + 2] = 0;
+				harrisImg[i][j * 3 + 0] = 255;
+				harrisImg[i][j * 3 + 1] = 0;
+				harrisImg[i][j * 3 + 2] = 0;
 			}
 			/* if(R[i][j] > 1) {
 				printf("%d\t%d\t%f\n", i, j, R[i][j]);

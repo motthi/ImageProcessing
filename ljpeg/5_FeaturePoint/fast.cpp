@@ -71,7 +71,7 @@ int main(int argc, char** argv) {
 	jpeg_set_defaults(&coutfo);
 	jpeg_set_quality(&coutfo, 75, TRUE);
 	jpeg_start_compress(&coutfo, TRUE);
-	int t			   = 10;
+	int t			   = 30;
 	JSAMPARRAY fastImg = (JSAMPARRAY)malloc(sizeof(JSAMPROW) * out_height);
 	for(int i = 0; i < out_height; i++) {
 		fastImg[i] = (JSAMPROW)calloc(sizeof(JSAMPLE), out_width * 3);
@@ -79,9 +79,15 @@ int main(int argc, char** argv) {
 			continue;
 		}
 		for(int j = 4; j < out_width - 4; j++) {
-			fastImg[i][j * 3 + 0] = inImg[i][j * 3 + 0];
-			fastImg[i][j * 3 + 1] = inImg[i][j * 3 + 1];
-			fastImg[i][j * 3 + 2] = inImg[i][j * 3 + 2];
+			if(cinfo.output_components == 1) {
+				fastImg[i][j * 3 + 0] = inImg[i][j];
+				fastImg[i][j * 3 + 1] = inImg[i][j];
+				fastImg[i][j * 3 + 2] = inImg[i][j];
+			} else if(cinfo.output_components == 3) {
+				fastImg[i][j * 3 + 0] = inImg[i][j * 3 + 0];
+				fastImg[i][j * 3 + 1] = inImg[i][j * 3 + 1];
+				fastImg[i][j * 3 + 2] = inImg[i][j * 3 + 2];
+			}
 			if(grayImg[i][j] > grayImg[i][j - 3] + t) {
 				if(grayImg[i][j] < grayImg[i + 1][j - 3] + t) {
 					continue;
@@ -177,9 +183,9 @@ int main(int argc, char** argv) {
 			} else {
 				continue;
 			}
-			fastImg[i][j * 3 + 1] = 255;
-			fastImg[i][j * 3 + 1] = 255;
-			fastImg[i][j * 3 + 2] = 255;
+			fastImg[i][j * 3 + 0] = 255;
+			fastImg[i][j * 3 + 1] = 0;
+			fastImg[i][j * 3 + 2] = 0;
 		}
 	}
 	jpeg_write_scanlines(&coutfo, fastImg, out_height);
